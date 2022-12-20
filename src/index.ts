@@ -11,3 +11,5 @@ export const getIronSession = createGetIronSession(
   unsealData,
   sealData,
 );
+
+export * from "./utils/getSession";

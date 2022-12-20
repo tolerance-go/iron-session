@@ -2,33 +2,22 @@ import * as Iron from "iron-webcrypto";
 import type { CookieSerializeOptions } from "cookie";
 import cookie from "cookie";
 import type { IncomingMessage, ServerResponse } from "http";
+import {
+  defaultOptions,
+  fourteenDaysInSeconds,
+  normalizeStringPasswordToMap,
+  password,
+} from "./utils/utils";
+import { getSession } from "./utils/getSession";
 
 // default time allowed to check for iron seal validity when ttl passed
 // see https://hapi.dev/family/iron/api/?v=6.0.0#options
 const timestampSkewSec = 60;
 
-type passwordsMap = { [id: string]: string };
-type password = string | passwordsMap;
-
-const fourteenDaysInSeconds = 15 * 24 * 3600;
-
 // We store a token major version to handle data format changes when any. So that when you upgrade the cookies
 // can be kept alive between upgrades, no need to disconnect everyone.
 const currentMajorVersion = 2;
 const versionDelimiter = "~";
-
-const defaultOptions: {
-  ttl: number;
-  cookieOptions: CookieSerializeOptions;
-} = {
-  ttl: fourteenDaysInSeconds,
-  cookieOptions: {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-  },
-};
 
 export interface IronSessionOptions {
   /**
@@ -163,19 +152,12 @@ export function createGetIronSession(
       options.cookieOptions.maxAge = computeCookieMaxAge(options.ttl);
     }
 
-    const sealFromCookies = cookie.parse(
+    const cookieText =
       "credentials" in req
         ? req.headers.get("cookie") || ""
-        : req.headers.cookie || "",
-    )[options.cookieName];
+        : req.headers.cookie || "";
 
-    const session =
-      sealFromCookies === undefined
-        ? {}
-        : await unsealData<IronSessionData>(sealFromCookies, {
-            password: passwordsAsMap,
-            ttl: options.ttl,
-          });
+    const session = await getSession(cookieText, userSessionOptions);
 
     Object.defineProperties(session, {
       save: {
@@ -334,8 +316,4 @@ export function createSealData(_crypto: Crypto) {
 
     return `${seal}${versionDelimiter}${currentMajorVersion}`;
   };
-}
-
-function normalizeStringPasswordToMap(password: password) {
-  return typeof password === "string" ? { 1: password } : password;
 }
